@@ -17,30 +17,17 @@
 #import <Foundation/Foundation.h>
 #import <Security/SecCertificate.h>
 
-typedef NS_ENUM(NSInteger, SRReadyState) {
+typedef enum {
     SR_CONNECTING   = 0,
     SR_OPEN         = 1,
     SR_CLOSING      = 2,
     SR_CLOSED       = 3,
-};
-
-typedef enum SRStatusCode : NSInteger {
-    SRStatusCodeNormal = 1000,
-    SRStatusCodeGoingAway = 1001,
-    SRStatusCodeProtocolError = 1002,
-    SRStatusCodeUnhandledType = 1003,
-    // 1004 reserved.
-    SRStatusNoStatusReceived = 1005,
-    // 1004-1006 reserved.
-    SRStatusCodeInvalidUTF8 = 1007,
-    SRStatusCodePolicyViolated = 1008,
-    SRStatusCodeMessageTooBig = 1009,
-} SRStatusCode;
+} SRReadyState;
 
 @class SRWebSocket;
 
 extern NSString *const SRWebSocketErrorDomain;
-extern NSString *const SRHTTPResponseErrorKey;
+extern NSInteger const SRWebSocketHeartbeatTimeoutErrorCode;
 
 #pragma mark - SRWebSocketDelegate
 
@@ -50,7 +37,7 @@ extern NSString *const SRHTTPResponseErrorKey;
 
 @interface SRWebSocket : NSObject <NSStreamDelegate>
 
-@property (nonatomic, weak) id <SRWebSocketDelegate> delegate;
+@property (nonatomic, assign) id <SRWebSocketDelegate> delegate;
 
 @property (nonatomic, readonly) SRReadyState readyState;
 @property (nonatomic, readonly, retain) NSURL *url;
@@ -59,11 +46,29 @@ extern NSString *const SRHTTPResponseErrorKey;
 // It will be nil until after the handshake completes.
 @property (nonatomic, readonly, copy) NSString *protocol;
 
+
+// How long to wait (in seconds) after any message is received before sending a heartbeat
+// (i.e. a ping frame). If 0, then never send a heartbeat. Defaults to 0, since heartbeat
+// logic is generally controlled by the server, where it is better suited. This does not
+// interfere with responding to ping frames sent by the server.
+@property (nonatomic, assign) NSTimeInterval heartbeatInterval;
+
+// How long to wait (in seconds) for a response from the server after sending a heartbeat before
+// considering the server unreachable and disconnecting. Defaults to 30 seconds.
+@property (nonatomic, assign) NSTimeInterval heartbeatTimeout;
+
+
+
+// Should not be changed after opening websocket
+@property (nonatomic) BOOL allowSelfSignedCertificates;
+
 // Protocols should be an array of strings that turn into Sec-WebSocket-Protocol.
-- (id)initWithURLRequest:(NSURLRequest *)request protocols:(NSArray *)protocols;
-- (id)initWithURLRequest:(NSURLRequest *)request;
+- (id)initWithURLRequest:(NSMutableURLRequest *)request protocols:(NSArray *)protocols allowSelfSignedCertificates:(BOOL)allowSelfSignedCertificates;
+- (id)initWithURLRequest:(NSMutableURLRequest *)request protocols:(NSArray *)protocols;
+- (id)initWithURLRequest:(NSMutableURLRequest *)request;
 
 // Some helper constructors.
+- (id)initWithURL:(NSURL *)url protocols:(NSArray *)protocols allowSelfSignedCertificates:(BOOL)allowSelfSignedCertificates;
 - (id)initWithURL:(NSURL *)url protocols:(NSArray *)protocols;
 - (id)initWithURL:(NSURL *)url;
 
@@ -85,8 +90,6 @@ extern NSString *const SRHTTPResponseErrorKey;
 // Send a UTF8 String or Data.
 - (void)send:(id)data;
 
-// Send Data (can be nil) in a ping message.
-- (void)sendPing:(NSData *)data;
 
 @end
 
@@ -103,7 +106,6 @@ extern NSString *const SRHTTPResponseErrorKey;
 - (void)webSocketDidOpen:(SRWebSocket *)webSocket;
 - (void)webSocket:(SRWebSocket *)webSocket didFailWithError:(NSError *)error;
 - (void)webSocket:(SRWebSocket *)webSocket didCloseWithCode:(NSInteger)code reason:(NSString *)reason wasClean:(BOOL)wasClean;
-- (void)webSocket:(SRWebSocket *)webSocket didReceivePong:(NSData *)pongPayload;
 
 @end
 
